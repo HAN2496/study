@@ -1,0 +1,3 @@
+Type,Ticker,Quantity,Price,Timestamp
+buy,BTC,2,200,2023-12-26 22:58:32.068145
+sell,BTC,1,250,2023-12-26 22:58:32.068145
