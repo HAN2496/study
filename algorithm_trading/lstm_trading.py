@@ -1,4 +1,5 @@
 from utils import *
+#from utils import StockPriceLSTM
 
 class Asset:
     def __init__(self):
@@ -55,15 +56,10 @@ class Asset:
             print(f"{ticker}: {quantity} units at {price} each")
         print(f"Total Asset: {self.total_asset}")
         print(f"Cash: {self.cash}")
+        print(f"*"*30)
 
-    def save(self, portfolio_filename, transactions_filename):
-        # 포트폴리오를 CSV 파일로 저장
-        with open(portfolio_filename, 'w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(['Ticker', 'Quantity', 'Price'])
-            for ticker, (quantity, price) in self.portfolio.items():
-                writer.writerow([ticker, quantity, price])
-
+    def save(self, transactions_filename):
+        transactions_filename = f"data/{transactions_filename}"
         # 거래 기록을 CSV 파일로 저장
         with open(transactions_filename, 'w', newline='') as file:
             writer = csv.writer(file)
@@ -76,7 +72,10 @@ class Asset:
 class User:
     def __init__(self, name):
         self.name = name
-        self.asset = Asset()  # 사용자의 자산 관리를 위한 Asset 인스턴스
+        self.asset = Asset()
+        self.history_num = 60
+        self.history_candlestick = "minute15"
+        self.lstm_model = StockPriceLSTM((self.history_num, 1))
 
     def add_cash(self, amount):
         self.asset.add_cash(amount)
@@ -90,16 +89,111 @@ class User:
     def show_portfolio(self):
         self.asset.show_portfolio()
 
-# 자산 클래스의 인스턴스 생성 및 테스트
-my_asset = Asset()
-my_asset.add_cash(1000)  # 현금 추가
-my_asset.buy('BTC', 2, 200)  # BTC 구매
-my_asset.sell('BTC', 1, 250)  # BTC 판매
+    def predict_and_trade(self, ticker, X_test, current_price, target_return):
+        """
+        가격 예측 및 거래 실행
+        :param ticker: 거래할 티커
+        :param X_test: 예측에 사용될 데이터
+        :param current_price: 현재 가격
+        :param target_return: 목표 수익률
+        """
+        predicted_price = self.lstm_model.model.predict(X_test)[0][0]
 
-# 포트폴리오 및 거래 기록 저장
-portfolio_filename = 'data/my_portfolio.csv'
-transactions_filename = 'data/my_transactions.csv'
-my_asset.save(portfolio_filename, transactions_filename)
+        # 예측 가격이 현재 가격 대비 목표 수익률 이상 증가할 것으로 예상되면 구매
+        if predicted_price >= current_price * (1 + target_return):
+            # 예상 수익률 달성을 위한 구매 수량 계산 (단순 예시)
+            quantity_to_buy = self.asset.cash // current_price
+            if quantity_to_buy > 0:
+                self.buy_crypto(ticker, quantity_to_buy, current_price)
+                print(f"Bought {quantity_to_buy} units of {ticker} at {current_price} each.")
 
-portfolio_filename, transactions_filename  # 파일 경로 반환
+        # 예측 가격이 현재 가격보다 낮을 것으로 예상되면 판매
+        elif predicted_price < current_price:
+            if ticker in self.asset.portfolio and self.asset.portfolio[ticker][0] > 0:
+                quantity_to_sell = self.asset.portfolio[ticker][0]
+                self.sell_crypto(ticker, quantity_to_sell, current_price)
+                print(f"Sold {quantity_to_sell} units of {ticker} at {current_price} each.")
 
+class VirtualTrading:
+    def __init__(self, initial_budget=10000000):
+        self.initial_budget = initial_budget
+        self.user_name = "Virtual Trader"
+        self.user = User(self.user_name)
+        self.user.add_cash(initial_budget)
+        self.trading_history = []
+        self.lstm_model = StockPriceLSTM(input_shape=lstm_input_shape)
+
+    def prepare_data(self, data, window_size=60):
+        """
+        LSTM 모델 입력을 위한 데이터 준비
+        :param data: 원시 시장 데이터
+        :param window_size: 사용할 시퀀스의 길이
+        :return: 변환된 데이터
+        """
+        features = data[['close', 'high', 'low', 'volume']].values
+
+        # 데이터 정규화
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        scaled_data = scaler.fit_transform(features)
+
+        # 시퀀스 데이터 생성
+        X_test = []
+        for i in range(window_size, len(scaled_data)):
+            X_test.append(scaled_data[i - window_size:i, :])
+
+        return np.array(X_test)
+
+
+    def fetch_data(self, ticker, interval="minute15", count=300):
+        """
+        PyUpbit로부터 특정 티커의 과거 데이터를 불러옵니다.
+        :param ticker: 데이터를 불러올 티커
+        :param interval: 데이터 간격 (예: 15분봉)
+        :param count: 불러올 데이터의 수
+        :return: 과거 시장 데이터
+        """
+        return pyupbit.get_ohlcv(ticker, interval=interval, count=count)
+
+    def simulate_trading(self, ticker, target_return, lstm_model, window_size=60):
+        """
+        가상 거래 시뮬레이션
+        :param ticker: 거래할 티커
+        :param target_return: 목표 수익률
+        :param lstm_model: LSTM 모델 인스턴스
+        :param window_size: 사용할 시퀀스의 길이
+        """
+        historical_data = self.fetch_data(ticker)
+
+        for date, data in historical_data.iterrows():
+            # 시뮬레이션을 위한 데이터 준비
+            X_test = self.prepare_data(historical_data[:date], window_size=window_size)
+            current_price = data['close']
+
+            # LSTM 모델을 사용한 예측
+            predicted_price = lstm_model.model.predict(X_test[-1].reshape(1, window_size, -1))[0][0]
+
+            # 예측 및 거래 실행
+            self.user.predict_and_trade(ticker, predicted_price, current_price, target_return)
+
+            # 거래 후 포트폴리오 상태 및 거래 기록을 저장
+            self.trading_history.append({
+                "date": date,
+                "portfolio": self.user.asset.portfolio,
+                "cash": self.user.asset.cash,
+                "total_asset": self.user.asset.total_asset
+            })
+
+        # 거래 결과 저장
+        transactions_filename = "virtual_trader_transactions.csv"
+        self.user.asset.save(transactions_filename)
+
+    def get_trading_history(self):
+        """
+        거래 기록 반환
+        """
+        return self.trading_history
+
+
+if __name__ == "__main__":
+    virtualTrader = VirtualTrading()
+    virtualTrader.simulate_trading("KRW-BTC", 0.01)
