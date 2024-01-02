@@ -9,7 +9,10 @@ import os
 
 m=1
 l=1
-g=9.81
+g=-9.81
+
+k=100
+c=10
 
 """
 
@@ -38,8 +41,19 @@ def kinetic_energy(q_dot, m=m, l=l):
 def potential_energy(theta, m=m, l=l):
     return m * g * l * (1 - tf.cos(theta))
 
+def kinetic_energy2(x1_t, x2_t, m1=m, m2=m):
+    return 1/2 * m1 * x1_t ** 2 + 1/2 * m2 * (x2_t + x1_t) ** 2
+
+def potential_energy2(x1, x2, m1=m, m2=m):
+    return m1 * g * x1 + m2 * g * (x1 + x2) + 1/2 * k * x1^2
+
+def damper_energy(x1_t, x2_t):
+    return - c * (x2_t - x1_t)
+
 def lagrangian(T, V):
     return T - V
+
+#def la
 
 def acceleration(L, q, qdot):
     pass
@@ -64,13 +78,45 @@ class SimplePendulum(Model):
         out = self.u(x)
         return out
 
+class LagrangianNN(Model):
+    def __init__(self, layer_sizes):
+        super(LagrangianNN, self).__init__()
+        self.layers_list = [Dense(size, activation='relu') for size in layer_sizes]
+        self.output_layer = Dense(1, activation='linear')
+
+    def call(self, inputs):
+        x = inputs
+        for layer in self.layers_list:
+            x = layer(x)
+        return self.output_layer(x)
+
 class LNN(object):
-    def __init__(self):
-        self.lr = 0.001
-        self.opt = Adam(self.lr)
+    def __init__(self, layer_sizes):
+        self.model = LagrangianNN(layer_sizes)
+        self.optimizer = Adam()
 
-        self.simple_pendulum = SimplePendulum()
-        self.simple_pendulum.build(input_shape=(None, 2))
+    def train_step(self, q, q_dot, q_ddot_true):
+        with tf.GradientTape() as tape:
+            L = self.model(tf.concat([q, q_dot], axis=1))
+            L_q = tf.gradients(L, q)[0]
+            L_q_dot = tf.gradients(L, q_dot)[0]
 
-    def physics_net(self):
-        pass
+            q_ddot_pred = tf.gradients(L_q_dot, q_dot)[0] - L_q
+            loss = tf.reduce_mean(tf.square(q_ddot_true - q_ddot_pred))
+
+        grads = tape.gradient(loss, self.model.trainable_variables)
+        self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
+        return loss
+
+    def train(self, q, q_dot, q_ddot, epochs):
+        for epoch in range(epochs):
+            loss = self.train_step(q, q_dot, q_ddot)
+            if epoch % 10 == 0:
+                print(f"Epoch {epoch}, Loss: {loss.numpy()}")
+
+    def predict(self, q, q_dot):
+        L = self.model(tf.concat([q, q_dot], axis=1))
+        L_q = tf.gradients(L, q)[0]
+        L_q_dot = tf.gradients(L, q_dot)[0]
+        q_ddot_pred = tf.gradients(L_q_dot, q_dot)[0] - L_q
+        return q_ddot_pred

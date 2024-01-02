@@ -8,6 +8,7 @@ from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from datetime import datetime
 
 class Burgers(Model):
 
@@ -16,16 +17,16 @@ class Burgers(Model):
         if h_num <= 0: raise ValueError("Put positive integer number")
 
         self.h_num = h_num
-        self.h_arr = [Dense(node_num, activation='tanh') for _ in range(hs)]
+        self.h_arr = [Dense(node_num, activation='tanh') for _ in range(h_num)]
         self.u = Dense(1, activation='linear')
 
 
     def call(self, state):
-        for idx, h in enumerate(h_arr):
+        for idx, h in enumerate(self.h_arr):
             if idx == 0:
-                x = self.h_arr[i](state)
+                x = self.h_arr[idx](state)
             else:
-                x = self.h_arr[i](x)
+                x = self.h_arr[idx](x)
         out = self.u(x)
         return out
 
@@ -120,7 +121,7 @@ class Pinn(object):
         train_loss_history = []
 
         print("*"*50)
-        print(f"hidden layer num: {self.hs}")
+        print(f"hidden layer num: {self.h_num}")
         time_before = datetime.now()
         for iter in range(int(max_num)):
 
@@ -135,12 +136,12 @@ class Pinn(object):
         time_after = datetime.now()
         self.save_weights("./save_weights/")
 
-        np.savetxt(f'./save_weights/loss{self.hs}.txt', train_loss_history)
+        np.savetxt(f'./save_weights/loss{self.h_num}.txt', train_loss_history)
         train_loss_history = np.array(train_loss_history)
         self.train_loss_history = train_loss_history
 
     def show(self):
-        plt.plot(train_loss_history[:, 0], train_loss_history[:, 1])
+        plt.plot(self.train_loss_history[:, 0], self.train_loss_history[:, 1])
         plt.yscale("log")
         plt.show()
 
