@@ -6,11 +6,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-
+dt = 0.01
 m=1
 l=1
 g=-9.81
 
+m1=m
+m2=m
 k=100
 c=10
 
@@ -35,88 +37,11 @@ def lagrangian(L, q_dot):
 
 lagrangian(1, [1,1])
 """
-def kinetic_energy(q_dot, m=m, l=l):
-    return 1/2 * m * (l * q_dot) ** 2
 
-def potential_energy(theta, m=m, l=l):
-    return m * g * l * (1 - tf.cos(theta))
+def single_pendulum_single(q, q_t):
+    return 1 / 2 * m * (l * q_t) ** 2 - m * g * l * (1 - tf.cos(q))
+def single_pendulum(q, q_t):
+    return tf.map_fn(lambda args: single_pendulum_single(*args), (q, q_t), dtype=tf.float32)
 
-def kinetic_energy2(x1_t, x2_t, m1=m, m2=m):
-    return 1/2 * m1 * x1_t ** 2 + 1/2 * m2 * (x2_t + x1_t) ** 2
-
-def potential_energy2(x1, x2, m1=m, m2=m):
-    return m1 * g * x1 + m2 * g * (x1 + x2) + 1/2 * k * x1^2
-
-def damper_energy(x1_t, x2_t):
-    return - c * (x2_t - x1_t)
-
-def lagrangian(T, V):
-    return T - V
-
-#def la
-
-def acceleration(L, q, qdot):
-    pass
-
-class SimplePendulum(Model):
-
-    def __init__(self, h_num=6, node_num=20):
-        super(SimplePendulum, self).__init__()
-        if h_num <= 0: raise ValueError("Put positive integer number")
-
-        self.h_num = h_num
-        self.h_arr = [Dense(node_num, activation='tanh') for _ in range(h_num)]
-        self.u = Dense(1, activation='linear')
-
-
-    def call(self, state):
-        for idx, h in enumerate(self.h_arr):
-            if idx == 0:
-                x = self.h_arr[idx](state)
-            else:
-                x = self.h_arr[idx](x)
-        out = self.u(x)
-        return out
-
-class LagrangianNN(Model):
-    def __init__(self, layer_sizes):
-        super(LagrangianNN, self).__init__()
-        self.layers_list = [Dense(size, activation='relu') for size in layer_sizes]
-        self.output_layer = Dense(1, activation='linear')
-
-    def call(self, inputs):
-        x = inputs
-        for layer in self.layers_list:
-            x = layer(x)
-        return self.output_layer(x)
-
-class LNN(object):
-    def __init__(self, layer_sizes):
-        self.model = LagrangianNN(layer_sizes)
-        self.optimizer = Adam()
-
-    def train_step(self, q, q_dot, q_ddot_true):
-        with tf.GradientTape() as tape:
-            L = self.model(tf.concat([q, q_dot], axis=1))
-            L_q = tf.gradients(L, q)[0]
-            L_q_dot = tf.gradients(L, q_dot)[0]
-
-            q_ddot_pred = tf.gradients(L_q_dot, q_dot)[0] - L_q
-            loss = tf.reduce_mean(tf.square(q_ddot_true - q_ddot_pred))
-
-        grads = tape.gradient(loss, self.model.trainable_variables)
-        self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
-        return loss
-
-    def train(self, q, q_dot, q_ddot, epochs):
-        for epoch in range(epochs):
-            loss = self.train_step(q, q_dot, q_ddot)
-            if epoch % 10 == 0:
-                print(f"Epoch {epoch}, Loss: {loss.numpy()}")
-
-    def predict(self, q, q_dot):
-        L = self.model(tf.concat([q, q_dot], axis=1))
-        L_q = tf.gradients(L, q)[0]
-        L_q_dot = tf.gradients(L, q_dot)[0]
-        q_ddot_pred = tf.gradients(L_q_dot, q_dot)[0] - L_q
-        return q_ddot_pred
+def single_pendulum_qddot(q):
+    return tf.cos(q) - 10 * tf.sin(q)
