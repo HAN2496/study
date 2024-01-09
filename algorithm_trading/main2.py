@@ -6,8 +6,9 @@ from utils import *
 class Asset:
     def __init__(self):
         self.portfolio = {}  # 형식: {ticker: [수량, 가격]}
-        self.cash = 0
-        self.total_asset = 0
+        self.cash = 1000000000
+        self.total_asset = self.cash
+        self.start_cash = self.cash
         self.transaction_history = []  # 거래 기록
 
     def add_cash(self, amount):
@@ -58,6 +59,8 @@ class Asset:
             print(f"{ticker}: {quantity} units at {price} each")
         print(f"Total Asset: {self.total_asset}")
         print(f"Cash: {self.cash}")
+        print(f"Start Cash: {self.start_cash}")
+        print(f"Earn: {(self.start_cash - self.cash)/self.start_cash * 100} (%)")
         print(f"*"*30)
 
     def save(self, transactions_filename):
@@ -92,29 +95,32 @@ class User:
     def show_portfolio(self):
         self.asset.show_portfolio()
 
-    def trade(self, ticker, predict, trade_time):
+    def trade(self, ticker, buy, trade_time, virtual):
         """
         가격 예측 및 거래 실행
         : current_price: 현재 가격
         : target_return: 목표 수익률
         """
-        predicted = predict[1] - predict[0] #0이 open, 1이 close
-
-        # 예측 가격이 현재 가격 대비 목표 수익률 이상 증가할 것으로 예상되면 구매
-        current_price = pyupbit.get_ohlcv(ticker, interval='minute1', count=1, to=trade_time)
-        if predicted >= 0:
+        if virtual:
+            idx = 'close' if trade_time.second > 30 else 'open'
+            current_price = pyupbit.get_ohlcv(ticker, interval='minute1', count=1, to=trade_time)[idx].iloc[0]
+        else:
+            current_price = pyupbit.get_current_price(ticker=ticker)
+        if buy:
             # 예상 수익률 달성을 위한 구매 수량 계산
             quantity_to_buy = self.asset.cash // current_price
+            print(f"quantity_to_buy: {quantity_to_buy}")
             if quantity_to_buy > 0:
                 self.buy_crypto(ticker, quantity_to_buy, current_price, trade_time)
                 print(f"Bought {quantity_to_buy} units of {ticker} at {current_price} each.")
 
         # 예측 가격이 현재 가격보다 낮을 것으로 예상되면 판매
-        elif predicted < 0:
+        else:
             if ticker in self.asset.portfolio and self.asset.portfolio[ticker][0] > 0:
                 quantity_to_sell = self.asset.portfolio[ticker][0]
                 self.sell_crypto(ticker, quantity_to_sell, current_price, trade_time)
                 print(f"Sold {quantity_to_sell} units of {ticker} at {current_price} each.")
+
 
 """
 Virtual Trading
@@ -170,8 +176,10 @@ def main():
     start_time = time.time()
     end_time = time.time()
     trade = 0
-    while virtual_time_now < datetime.now():
-        if virtual_time_now.hour > 8 and virtual_time_now.minute > 30 and trade == 0:
+    #while virtual_time_now < datetime.now():
+    while True:
+        #if virtual_time_now.hour > 8 and virtual_time_now.minute > 30 and trade == 0:
+        if True:
             trade = 1
             virtual_time_now += timedelta(end_time - start_time)
             end_time = time.time()
@@ -189,8 +197,8 @@ def main():
             save_history(history, i, name)
 
             predictions = model.model.predict(X_test)
+            print(f"predictions: {predictions}")
             predictions = scaler.inverse_transform(predictions)  # 예측값을 원래 스케일로 변환
-
             user.trade(ticker=ticker, predict=predictions, trade_time=virtual_time_now)
             virtual_time_now = virtual_time_before
             start_time = time.time()

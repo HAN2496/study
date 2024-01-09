@@ -1,6 +1,7 @@
 import pyupbit
 import csv
 from datetime import datetime, timedelta
+import datetime as dt
 import time
 import os
 import numpy as np
@@ -59,11 +60,10 @@ def save_history(history, num, user_name, show=False):
         plt.show()
 
     #데이터 csv로 저장
-    print(history.history)
     history_df = pd.DataFrame(history.history)
     if not os.path.exists(user_name):
         os.makedirs(user_name)
-    filename = f"{user_name}/{num}.csv"
+    filename = f"{user_name}.csv"
     history_df.to_csv(filename, index=False)
 
 class StockPriceLSTM:
@@ -88,7 +88,7 @@ class StockPriceLSTM:
             self.model.add(Dropout(dropout_rate))
 
         # 출력 레이어
-        self.model.add(Dense(2))
+        self.model.add(Dense(6))
 
     def compile(self, learning_rate=0.001):
         """
@@ -97,8 +97,7 @@ class StockPriceLSTM:
         """
         self.model.compile(optimizer=Adam(learning_rate=learning_rate), loss='mean_squared_error')
 
-    def train(self, X_train, y_train, epochs=500, batch_size=64, validation_split=0.2, steps_per_epoch=200,
-              validation_steps=50):
+    def train(self, X_train, y_train, epochs=500, batch_size=64, validation_split=0.2, validation_steps=50):
         """
         모델 훈련
         :param X_train: 훈련 데이터
@@ -106,18 +105,14 @@ class StockPriceLSTM:
         :param epochs: 에폭 수
         :param batch_size: 배치 크기
         :param validation_split: 검증 데이터 비율
-        :param steps_per_epoch: 에폭 당 스텝 수
         :param validation_steps: 검증 당 스텝 수
         """
         return self.model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size,
-                              validation_split=validation_split, steps_per_epoch=steps_per_epoch,
-                              validation_steps=validation_steps)
-
+                              validation_split=validation_split)
 
 if __name__ == '__main__':
-    pass
-    #model = StockPriceLSTM(input_shape=(60, 1))
-    #model.compile()
+    a = datetime.now()
+    print(a)
 
 
 
